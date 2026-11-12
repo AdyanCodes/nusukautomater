@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nusuk code queue</title>
+<meta name="theme-color" content="#0f6b5c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#f2f4f0;--ink:#14231f;--mute:#55665f;--line:#c9d3cc;--acc:#0f6b5c;--accink:#fff;--warn:#9a3b2b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a17;--ink:#e6efe9;--mute:#94a79e;--line:#27382f;--acc:#3fb59c;--accink:#05201a;--warn:#e08a78}}
+:root[data-theme="dark"]{--bg:#0f1a17;--ink:#e6efe9;--mute:#94a79e;--line:#27382f;--acc:#3fb59c;--accink:#05201a;--warn:#e08a78}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:30rem;margin:0 auto;padding:1.25rem 1rem 3rem}
+h1{font-size:1.25rem;margin:0 0 .25rem}
+.sub{color:var(--mute);margin:0 0 1.25rem;font-size:.95rem}
+.stats{display:flex;gap:1.25rem;flex-wrap:wrap;margin:0 0 1rem;padding:0;list-style:none;font-size:.95rem;color:var(--mute)}
+.stats b{display:block;color:var(--ink);font-size:1.25rem}
+.code{display:block;width:100%;text-align:left;background:none;color:var(--ink);border:2px solid var(--line);border-radius:12px;padding:1.1rem 1rem;
+font:600 1.9rem/1.2 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.04em;overflow-wrap:anywhere;cursor:pointer}
+.hint{color:var(--mute);font-size:.85rem;margin:.4rem 0 1rem;min-height:1.3em}
+.btn{display:block;width:100%;text-align:center;text-decoration:none;font:600 1.05rem system-ui,sans-serif;padding:.95rem 1rem;border-radius:10px;border:2px solid var(--acc);cursor:pointer}
+.primary{background:var(--acc);color:var(--accink)}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin:.75rem 0 1.5rem}
+.row .btn{background:none;color:var(--ink);border-color:var(--line);font-size:.95rem;padding:.8rem .4rem}
+.row .good{border-color:var(--acc);color:var(--acc)}
+button:focus-visible,a:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+details{border-top:1px solid var(--line);padding:.75rem 0}
+summary{cursor:pointer;font-weight:600}
+textarea{width:100%;min-height:6rem;margin:.6rem 0;padding:.6rem;background:var(--bg);color:var(--ink);border:2px solid var(--line);border-radius:8px;font:.9rem ui-monospace,Consolas,monospace}
+.small{font-size:.8rem;color:var(--mute);margin-top:1.25rem}
+.link{background:none;border:0;color:var(--warn);font:inherit;text-decoration:underline;cursor:pointer;padding:.3rem 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Nusuk code queue</h1>
+<p class="sub">One code at a time. You paste and tap Check inside Nusuk, then come back and mark the result.</p>
+<ul class="stats" aria-live="polite">
+<li><b id="sOk">0</b>worked</li><li><b id="sUsed">0</b>used or invalid</li><li><b id="sSkip">0</b>skipped</li><li><b id="sLeft">0</b>left</li>
+</ul>
+<button class="code" id="code" type="button" aria-label="Current code. Tap to copy."></button>
+<p class="hint" id="hint" role="status">Tap the code to copy it.</p>
+<a class="btn primary" id="open" target="_blank" rel="noopener">Copy and open in Nusuk</a>
+<div class="row">
+<button class="btn good" id="bOk" type="button">It worked</button>
+<button class="btn" id="bUsed" type="button">Used or invalid</button>
+<button class="btn" id="bSkip" type="button">Skip</button>
+</div>
+<details>
+<summary>Add your own codes</summary>
+<textarea id="paste" placeholder="Paste codes or invite links here" aria-label="Codes to add"></textarea>
+<button class="btn" id="add" type="button" style="background:none;color:var(--ink);border-color:var(--line)">Add to the front of the queue</button>
+</details>
+<details>
+<summary>Reset</summary>
+<p class="sub">Clears your progress and counts on this device.</p>
+<button class="link" id="reset" type="button">Reset progress</button>
+</details>
+<p class="small">Independent tool, not affiliated with Nusuk. The built-in codes are public and most are probably used already, so expect many “used” results. Never share your Nusuk password or OTP with anyone.</p>
+</main>
+<script>
+let ALL=[],ready=false;
+const KEY="nusukq1";
+let st={i:0,ok:0,used:0,skip:0,extra:[]};
+try{const s=localStorage.getItem(KEY);if(s)st=Object.assign(st,JSON.parse(s));}catch(e){}
+const $=id=>document.getElementById(id);
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}}
+function cur(){return st.extra.length?st.extra[0]:(st.i<ALL.length?ALL[st.i]:null);}
+function left(){return st.extra.length+Math.max(0,ALL.length-st.i);}
+function advance(){if(st.extra.length)st.extra.shift();else st.i++;}
+function render(){
+ if(!ready){$("code").textContent="Loading codes…";$("open").style.display="none";["bOk","bUsed","bSkip"].forEach(b=>$(b).disabled=true);return;}
+ const c=cur();
+ $("sOk").textContent=st.ok;$("sUsed").textContent=st.used;$("sSkip").textContent=st.skip;$("sLeft").textContent=left();
+ const done=c===null;
+ $("code").textContent=done?"All codes tried":c;
+ $("open").style.display=done?"none":"block";
+ ["bOk","bUsed","bSkip"].forEach(b=>$(b).disabled=done);
+ if(!done)$("open").href="https://services.nusuk.sa/app?p=27&id="+encodeURIComponent(c);
+}
+function copy(t){
+ return (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject()).catch(()=>{
+  const a=document.createElement("textarea");a.value=t;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();
+  let ok=false;try{ok=document.execCommand("copy");}catch(e){}a.remove();if(!ok)throw new Error("copy");});
+}
+function say(m){$("hint").textContent=m;}
+function doCopy(){const c=cur();if(!c)return;copy(c).then(()=>say("Copied "+c+". Paste it in Nusuk and tap Check the code."),()=>say("Couldn’t copy. Press and hold the code to select it."));}
+$("code").onclick=doCopy;
+$("open").addEventListener("click",doCopy);
+function mark(k,msg){if(cur()===null)return;st[k]++;advance();save();render();say(msg);}
+$("bOk").onclick=()=>mark("ok","Nice. Next code is ready.");
+$("bUsed").onclick=()=>mark("used","Next code is ready.");
+$("bSkip").onclick=()=>mark("skip","Skipped. Next code is ready.");
+$("add").onclick=()=>{
+ const m=($("paste").value.match(/NG-[A-Za-z0-9_-]+/g)||[]);
+ const u=[...new Set(m)];
+ if(!u.length){say("No NG- codes found in what you pasted.");return;}
+ st.extra=u.concat(st.extra);save();$("paste").value="";render();say("Added "+u.length+" code"+(u.length>1?"s":"")+" to the front.");
+};
+$("reset").onclick=()=>{if(confirm("Clear progress and counts?")){st={i:0,ok:0,used:0,skip:0,extra:[]};save();render();say("Progress cleared.");}};
+function boot(){
+ fetch("codes.txt",{cache:"no-cache"}).then(r=>{if(!r.ok)throw 0;return r.text();}).then(x=>{
+  const body=x.split(/\r?\n/).filter(l=>!l.trim().startsWith("#")).join("\n");
+  ALL=[...new Set(body.match(/NG-[A-Za-z0-9_-]+/g)||[])];ready=true;render();
+ }).catch(()=>{ready=true;render();say("Couldn’t load codes.txt. Open this page from its web address, not as a local file.");});
+}
+render();boot();
+if("serviceWorker" in navigator){try{navigator.serviceWorker.register("sw.js").catch(()=>{});}catch(e){}}
+</script>
+</body>
+</html>
